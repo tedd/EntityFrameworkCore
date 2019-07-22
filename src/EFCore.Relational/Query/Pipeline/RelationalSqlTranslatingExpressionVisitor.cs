@@ -178,9 +178,9 @@ namespace Microsoft.EntityFrameworkCore.Relational.Query.Pipeline
                 return result;
             }
 
-            return TranslationFailed(memberExpression.Expression, innerExpression)
+            return TranslationFailed(memberExpression.Expression, innerExpression, out var sqlInnerExpression)
                 ? null
-                : _memberTranslatorProvider.Translate((SqlExpression)innerExpression, memberExpression.Member, memberExpression.Type);
+                : _memberTranslatorProvider.Translate(sqlInnerExpression, memberExpression.Member, memberExpression.Type);
         }
 
         private bool TryBindMember(Expression source, MemberIdentity member, out Expression expression)
@@ -334,8 +334,7 @@ namespace Microsoft.EntityFrameworkCore.Relational.Query.Pipeline
             }
 
             // MethodCall translators
-            var @object = Visit(methodCallExpression.Object);
-            if (TranslationFailed(methodCallExpression.Object, @object))
+            if (TranslationFailed(methodCallExpression.Object, Visit(methodCallExpression.Object), out var sqlObject))
             {
                 return null;
             }
@@ -343,15 +342,15 @@ namespace Microsoft.EntityFrameworkCore.Relational.Query.Pipeline
             var arguments = new SqlExpression[methodCallExpression.Arguments.Count];
             for (var i = 0; i < arguments.Length; i++)
             {
-                var argument = Visit(methodCallExpression.Arguments[i]);
-                if (TranslationFailed(methodCallExpression.Arguments[i], argument))
+                var argument = methodCallExpression.Arguments[i];
+                if (TranslationFailed(argument, Visit(argument), out var sqlArgument))
                 {
                     return null;
                 }
-                arguments[i] = (SqlExpression)argument;
+                arguments[i] = sqlArgument;
             }
 
-            return _methodCallTranslatorProvider.Translate(_model, (SqlExpression)@object, methodCallExpression.Method, arguments);
+            return _methodCallTranslatorProvider.Translate(_model, sqlObject, methodCallExpression.Method, arguments);
         }
 
         private static Expression TryRemoveImplicitConvert(Expression expression)
@@ -432,19 +431,16 @@ namespace Microsoft.EntityFrameworkCore.Relational.Query.Pipeline
             var left = TryRemoveImplicitConvert(binaryExpression.Left);
             var right = TryRemoveImplicitConvert(binaryExpression.Right);
 
-            left = Visit(left);
-            right = Visit(right);
-
-            if (TranslationFailed(binaryExpression.Left, left)
-                || TranslationFailed(binaryExpression.Right, right))
+            if (TranslationFailed(binaryExpression.Left, Visit(left), out var sqlLeft)
+                || TranslationFailed(binaryExpression.Right, Visit(right), out var sqlRight))
             {
                 return null;
             }
 
             return _sqlExpressionFactory.MakeBinary(
                 binaryExpression.NodeType,
-                (SqlExpression)left,
-                (SqlExpression)right,
+                sqlLeft,
+                sqlRight,
                 null);
         }
 
@@ -498,19 +494,14 @@ namespace Microsoft.EntityFrameworkCore.Relational.Query.Pipeline
             var ifTrue = Visit(conditionalExpression.IfTrue);
             var ifFalse = Visit(conditionalExpression.IfFalse);
 
-            if (TranslationFailed(conditionalExpression.Test, test)
-                || TranslationFailed(conditionalExpression.IfTrue, ifTrue)
-                || TranslationFailed(conditionalExpression.IfFalse, ifFalse))
+            if (TranslationFailed(conditionalExpression.Test, test, out var sqlTest)
+                || TranslationFailed(conditionalExpression.IfTrue, ifTrue, out var sqlIfTrue)
+                || TranslationFailed(conditionalExpression.IfFalse, ifFalse, out var sqlIfFalse))
             {
                 return null;
             }
 
-            return _sqlExpressionFactory.Case(
-                new[]
-                {
-                    new CaseWhenClause((SqlExpression)test,(SqlExpression) ifTrue)
-                },
-                (SqlExpression)ifFalse);
+            return _sqlExpressionFactory.Case(new[] { new CaseWhenClause(sqlTest, sqlIfTrue) }, sqlIfFalse);
         }
 
         protected override Expression VisitUnary(UnaryExpression unaryExpression)
@@ -522,12 +513,11 @@ namespace Microsoft.EntityFrameworkCore.Relational.Query.Pipeline
                 return unaryExpression.Update(operand);
             }
 
-            if (TranslationFailed(unaryExpression.Operand, operand))
+            if (TranslationFailed(unaryExpression.Operand, operand, out var sqlOperand))
             {
                 return null;
             }
 
-            var sqlOperand = (SqlExpression)operand;
             switch (unaryExpression.NodeType)
             {
                 case ExpressionType.Not:
@@ -562,7 +552,16 @@ namespace Microsoft.EntityFrameworkCore.Relational.Query.Pipeline
         }
 
         [DebuggerStepThrough]
-        private bool TranslationFailed(Expression original, Expression translation)
-            => original != null && !(translation is SqlExpression);
+        private bool TranslationFailed(Expression original, Expression translation, out SqlExpression castTranslation)
+        {
+            if (original != null && !(translation is SqlExpression))
+            {
+                castTranslation = null;
+                return true;
+            }
+
+            castTranslation = translation as SqlExpression;
+            return false;
+        }
     }
 }
