@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
+    <AssemblyName>Tedd.EFCore.Teradata.TdServer.Tests</AssemblyName>
+    <RootNamespace>Tedd.EFCore.Teradata</RootNamespace>
+    <CodeAnalysisRuleSet>..\..\EFCore.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\xunit.runner.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.2" />
+    <PackageReference Include="Teradata.Client.Provider" Version="16.20.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Tedd.EFCore.Teradata.TdServer\Tedd.EFCore.Teradata.TdServer.csproj" />
+    <ProjectReference Include="..\EFCore.Relational.Tests\EFCore.Relational.Tests.csproj" />
+    <ProjectReference Include="..\Tedd.EFCore.Teradata.TdServer.FunctionalTests\Tedd.EFCore.Teradata.TdServer.FunctionalTests.csproj" />
+  </ItemGroup>
+
+</Project>

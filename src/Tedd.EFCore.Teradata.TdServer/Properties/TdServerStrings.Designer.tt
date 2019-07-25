@@ -1,0 +1,5 @@
+<#
+    Session["ResourceFile"] = "TdServerStrings.resx";
+    Session["LoggingDefinitionsClass"] = "Diagnostics.Internal.TdServerLoggingDefinitions";
+#>
+<#@ include file="..\..\..\tools\Resources.tt" #>
