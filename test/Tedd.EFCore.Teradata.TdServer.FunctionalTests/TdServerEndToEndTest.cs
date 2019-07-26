@@ -477,7 +477,7 @@ namespace Microsoft.EntityFrameworkCore
                 using (var db = new NorthwindContext(Fixture.CreateOptions(testStore)))
                 {
                     var results = new List<Customer>();
-                    foreach (var item in db.Customers)
+                    foreach (var item in db.Customers.OrderBy(c => c.CustomerID))
                     {
                         results.Add(item);
                     }

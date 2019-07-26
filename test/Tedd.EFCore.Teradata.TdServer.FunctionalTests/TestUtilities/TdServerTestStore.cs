@@ -146,7 +146,7 @@ namespace Microsoft.EntityFrameworkCore.TestUtilities
                 Connection, command =>
                 {
                     foreach (var batch in
-                        new Regex("^GO", RegexOptions.IgnoreCase | RegexOptions.Multiline, TimeSpan.FromMilliseconds(1000.0))
+                        new Regex("^COMMIT;", RegexOptions.IgnoreCase | RegexOptions.Multiline, TimeSpan.FromMilliseconds(1000.0))
                             .Split(script).Where(b => !string.IsNullOrEmpty(b)))
                     {
                         command.CommandText = batch;
@@ -203,7 +203,7 @@ namespace Microsoft.EntityFrameworkCore.TestUtilities
 
         private static string GetCreateDatabaseStatement(string name)
         {
-            var result = $"CREATE DATABASE {name} AS PERMANENT = 1000000 BYTES;";
+            var result = $"CREATE DATABASE {name} AS PERMANENT = 100000000 BYTES;";
 
             //if (TestEnvironment.IsSqlAzure)
             //{
