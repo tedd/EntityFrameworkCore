@@ -11,6 +11,7 @@ using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Update;
+using Microsoft.EntityFrameworkCore.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 using Tedd.EFCore.Teradata.Metadata;
 
@@ -42,7 +43,37 @@ namespace Tedd.EFCore.Teradata.TdServer.Update.Internal
             : base(dependencies)
         {
         }
+        /// <summary>
+        ///     Appends a SQL command for inserting a row to the commands being built.
+        /// </summary>
+        /// <param name="commandStringBuilder"> The builder to which the SQL should be appended. </param>
+        /// <param name="command"> The command that represents the delete operation. </param>
+        /// <param name="commandPosition"> The ordinal of this command in the batch. </param>
+        /// <returns> The <see cref="ResultSetMapping" /> for the command. </returns>
+        public override ResultSetMapping AppendInsertOperation(
+            StringBuilder commandStringBuilder, ModificationCommand command, int commandPosition)
+        {
+            Check.NotNull(commandStringBuilder, nameof(commandStringBuilder));
+            Check.NotNull(command, nameof(command));
 
+            var name = command.TableName;
+            var schema = command.Schema;
+            var operations = command.ColumnModifications;
+
+            var writeOperations = operations.Where(o => o.IsWrite).ToList();
+            var readOperations = operations.Where(o => o.IsRead).ToList();
+
+            AppendInsertCommand(commandStringBuilder, name, schema, writeOperations);
+
+            if (readOperations.Count > 0)
+            {
+                var keyOperations = operations.Where(o => o.IsKey).ToList();
+
+                return AppendSelectAffectedCommand(commandStringBuilder, name, schema, readOperations, keyOperations, commandPosition);
+            }
+
+            return ResultSetMapping.NoResultSet;
+        }
         /// <summary>
         ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
         ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
@@ -508,6 +539,78 @@ namespace Tedd.EFCore.Teradata.TdServer.Update.Internal
         //        .Append("SET NOCOUNT ON")
         //        .AppendLine(SqlGenerationHelper.StatementTerminator);
         //}
+        /// <summary>
+        ///     Appends a SQL command for selecting affected data.
+        /// </summary>
+        /// <param name="commandStringBuilder"> The builder to which the SQL should be appended. </param>
+        /// <param name="name"> The name of the table. </param>
+        /// <param name="schema"> The table schema, or <c>null</c> to use the default schema. </param>
+        /// <param name="readOperations"> The operations representing the data to be read. </param>
+        /// <param name="conditionOperations"> The operations used to generate the <c>WHERE</c> clause for the select. </param>
+        /// <param name="commandPosition"> The ordinal of the command for which rows affected it being returned. </param>
+        /// <returns> The <see cref="ResultSetMapping" /> for this command.</returns>
+        protected override ResultSetMapping AppendSelectAffectedCommand(
+            [NotNull] StringBuilder commandStringBuilder,
+            [NotNull] string name,
+            [CanBeNull] string schema,
+            [NotNull] IReadOnlyList<ColumnModification> readOperations,
+            [NotNull] IReadOnlyList<ColumnModification> conditionOperations,
+            int commandPosition)
+        {
+            Check.NotNull(commandStringBuilder, nameof(commandStringBuilder));
+            Check.NotEmpty(name, nameof(name));
+            Check.NotNull(readOperations, nameof(readOperations));
+            Check.NotNull(conditionOperations, nameof(conditionOperations));
+
+            AppendSelectCommandHeader(commandStringBuilder, readOperations);
+            AppendFromClause(commandStringBuilder, name, schema);
+            // TODO: there is no notion of operator - currently all the where conditions check equality
+            AppendWhereAffectedClause(commandStringBuilder, conditionOperations);
+            commandStringBuilder.AppendLine(SqlGenerationHelper.StatementTerminator)
+                .AppendLine();
+
+            return ResultSetMapping.LastInResultSet;
+        }
+
+        /// <summary>
+        ///     Appends a <c>WHERE</c> clause.
+        /// </summary>
+        /// <param name="commandStringBuilder"> The builder to which the SQL should be appended. </param>
+        /// <param name="operations"> The operations from which to build the conditions. </param>
+        protected override void AppendWhereAffectedClause(
+            [NotNull] StringBuilder commandStringBuilder,
+            [NotNull] IReadOnlyList<ColumnModification> operations)
+        {
+            Check.NotNull(commandStringBuilder, nameof(commandStringBuilder));
+            Check.NotNull(operations, nameof(operations));
+
+            commandStringBuilder
+                .AppendLine()
+                .Append("WHERE ");
+
+            AppendRowsAffectedWhereCondition(commandStringBuilder, 1);
+
+            if (operations.Count > 0)
+            {
+                commandStringBuilder
+                    .Append(" AND ")
+                    .AppendJoin(
+                        operations, (sb, v) =>
+                        {
+                            if (v.IsKey)
+                            {
+                                if (v.IsRead)
+                                {
+                                    AppendIdentityWhereCondition(sb, v);
+                                }
+                                else
+                                {
+                                    AppendWhereCondition(sb, v, v.UseOriginalValueParameter);
+                                }
+                            }
+                        }, " AND ");
+            }
+        }
 
         /// <summary>
         ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to

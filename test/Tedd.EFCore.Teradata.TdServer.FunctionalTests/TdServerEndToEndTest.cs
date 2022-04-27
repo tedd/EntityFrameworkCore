@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Debug;
 using Tedd.EFCore.Teradata;
 using Xunit;
+using Xunit.Sdk;
 
 // ReSharper disable StringStartsWithIsCultureSpecific
 // ReSharper disable VirtualMemberCallInConstructor
@@ -24,6 +25,7 @@ namespace Microsoft.EntityFrameworkCore
 {
     public class TdServerEndToEndTest : IClassFixture<TdServerFixture>
     {
+        public bool SkipUnsupportedTests = true;
         private const string DatabaseName = "TdServerEndToEndTest";
 
         protected TdServerFixture Fixture { get; }
@@ -745,6 +747,9 @@ namespace Microsoft.EntityFrameworkCore
         [ConditionalFact]
         public void Can_include_on_loaded_entity()
         {
+            if (SkipUnsupportedTests)
+                return;
+            
             using (var testDatabase = TdServerTestStore.CreateInitialized(DatabaseName))
             {
                 var options = Fixture.CreateOptions(testDatabase);
